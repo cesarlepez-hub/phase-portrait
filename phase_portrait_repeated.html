@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phase Portrait Explorer — Repeated Eigenvalues</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'IBM Plex Mono', 'Menlo', monospace;
+    background: #f7f6f3;
+    color: #1a1a1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 2rem 1rem;
+  }
+
+  h1 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.3rem;
+  }
+
+  .subtitle {
+    font-size: 0.78rem;
+    color: #666;
+    margin-bottom: 1.5rem;
+    text-align: center;
+  }
+
+  canvas {
+    border: 1px solid #ccc;
+    background: #fff;
+  }
+
+  .controls {
+    margin-top: 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    width: 500px;
+    max-width: 90vw;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+
+  .slider-row label {
+    font-size: 0.85rem;
+    min-width: 2.5rem;
+    text-align: right;
+  }
+
+  .slider-row input[type="range"] {
+    flex: 1;
+    accent-color: #1a1a1a;
+  }
+
+  .slider-row .value {
+    font-size: 0.85rem;
+    min-width: 5rem;
+    text-align: left;
+    color: #444;
+  }
+
+  .classification {
+    text-align: center;
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+    color: #444;
+    min-height: 1.2em;
+  }
+</style>
+</head>
+<body>
+
+<h1>Phase Portrait Explorer</h1>
+<p class="subtitle">Repeated eigenvalue λ — s = 0: proper node (λI), s = 1: improper node (Jordan block)</p>
+
+<canvas id="canvas" width="500" height="500"></canvas>
+
+<div class="controls">
+  <div class="slider-row">
+    <label>λ</label>
+    <input type="range" id="lam" min="-5" max="5" step="0.1" value="-1">
+    <span class="value" id="lamVal">-1.0</span>
+  </div>
+  <div class="slider-row">
+    <label>s</label>
+    <input type="range" id="s" min="0" max="1" step="1" value="1">
+    <span class="value" id="sVal">1 (improper)</span>
+  </div>
+</div>
+
+<p class="classification" id="classLabel"></p>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const W = canvas.width;
+const H = canvas.height;
+const RANGE = 5;
+
+const starts = [];
+for (let i = 0; i < 8; i++) {
+  const t = i * Math.PI / 4;
+  starts.push([Math.cos(t), Math.sin(t)]);
+}
+const offAxis = [45, 135, 225, 315].map(d => d * Math.PI / 180);
+for (const t of offAxis) {
+  starts.push([2 * Math.cos(t), 2 * Math.sin(t)]);
+  starts.push([3 * Math.cos(t), 3 * Math.sin(t)]);
+}
+
+function toCanvas(x, y) {
+  return [
+    (x / RANGE + 1) * W / 2,
+    (1 - y / RANGE) * H / 2
+  ];
+}
+
+function classify(lam, s) {
+  if (lam === 0) return 'Degenerate (λ = 0)';
+  if (s === 0) {
+    return lam < 0 ? 'Proper stable node (star sink)' : 'Proper unstable node (star source)';
+  }
+  return lam < 0 ? 'Improper stable node (sink)' : 'Improper unstable node (source)';
+}
+
+function draw(lam, s) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Axes
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+  ctx.lineWidth = 1;
+  let [x1, y1] = toCanvas(-RANGE, 0);
+  let [x2, y2] = toCanvas(RANGE, 0);
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  [x1, y1] = toCanvas(0, -RANGE);
+  [x2, y2] = toCanvas(0, RANGE);
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+
+  const nPts = 500;
+
+  for (const [sx, sy] of starts) {
+    for (const dir of [1, -1]) {
+      ctx.strokeStyle = '#2255aa';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      let started = false;
+
+      for (let i = 0; i < nPts; i++) {
+        const t = dir * i * 6 / nPts;
+        const ex = Math.exp(lam * t);
+        const px = ex * (sx + s * t * sy);
+        const py = ex * sy;
+
+        if (Math.abs(px) > 6 || Math.abs(py) > 6) {
+          if (started) { ctx.stroke(); started = false; }
+          continue;
+        }
+
+        const [cx, cy] = toCanvas(px, py);
+        if (!started) {
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          started = true;
+        } else {
+          ctx.lineTo(cx, cy);
+        }
+      }
+      if (started) ctx.stroke();
+    }
+
+    // Arrow at starting point
+    const adx = lam * sx + s * sy;
+    const ady = lam * sy;
+    const spd = Math.sqrt(adx * adx + ady * ady);
+    if (spd > 0) {
+      const arrowLen = 0.2;
+      const nx = adx / spd * arrowLen;
+      const ny = ady / spd * arrowLen;
+      const [ax1, ay1] = toCanvas(sx, sy);
+      const [ax2, ay2] = toCanvas(sx + nx, sy + ny);
+
+      ctx.strokeStyle = '#cc3333';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(ax1, ay1);
+      ctx.lineTo(ax2, ay2);
+      ctx.stroke();
+
+      const angle = Math.atan2(ay2 - ay1, ax2 - ax1);
+      const headLen = 7;
+      ctx.fillStyle = '#cc3333';
+      ctx.beginPath();
+      ctx.moveTo(ax2, ay2);
+      ctx.lineTo(ax2 - headLen * Math.cos(angle - 0.4), ay2 - headLen * Math.sin(angle - 0.4));
+      ctx.lineTo(ax2 - headLen * Math.cos(angle + 0.4), ay2 - headLen * Math.sin(angle + 0.4));
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  document.getElementById('classLabel').textContent = classify(lam, s);
+}
+
+const lamSlider = document.getElementById('lam');
+const sSlider = document.getElementById('s');
+const lamVal = document.getElementById('lamVal');
+const sVal = document.getElementById('sVal');
+
+function update() {
+  const l = parseFloat(lamSlider.value);
+  const s = parseInt(sSlider.value);
+  lamVal.textContent = l.toFixed(1);
+  sVal.textContent = s === 0 ? '0 (proper)' : '1 (improper)';
+  draw(l, s);
+}
+
+lamSlider.addEventListener('input', update);
+sSlider.addEventListener('input', update);
+
+update();
+</script>
+</body>
+</html>
