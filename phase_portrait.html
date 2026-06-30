@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phase Portrait Explorer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'IBM Plex Mono', 'Menlo', monospace;
+    background: #f7f6f3;
+    color: #1a1a1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 2rem 1rem;
+  }
+
+  h1 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.3rem;
+  }
+
+  .subtitle {
+    font-size: 0.78rem;
+    color: #666;
+    margin-bottom: 1.5rem;
+  }
+
+  canvas {
+    border: 1px solid #ccc;
+    background: #fff;
+  }
+
+  .controls {
+    margin-top: 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    width: 500px;
+    max-width: 90vw;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+
+  .slider-row label {
+    font-size: 0.85rem;
+    min-width: 2.5rem;
+    text-align: right;
+  }
+
+  .slider-row input[type="range"] {
+    flex: 1;
+    accent-color: #1a1a1a;
+  }
+
+  .slider-row .value {
+    font-size: 0.85rem;
+    min-width: 3rem;
+    text-align: left;
+    color: #444;
+  }
+
+  .classification {
+    text-align: center;
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+    color: #444;
+    min-height: 1.2em;
+  }
+</style>
+</head>
+<body>
+
+<h1>Phase Portrait Explorer</h1>
+<p class="subtitle">X' = diag(λ₁, λ₂) X — Euler method on canonical planar linear systems</p>
+
+<canvas id="canvas" width="500" height="500"></canvas>
+
+<div class="controls">
+  <div class="slider-row">
+    <label>λ₁</label>
+    <input type="range" id="lam1" min="-5" max="5" step="0.1" value="-1">
+    <span class="value" id="lam1val">-1.0</span>
+  </div>
+  <div class="slider-row">
+    <label>λ₂</label>
+    <input type="range" id="lam2" min="-5" max="5" step="0.1" value="1">
+    <span class="value" id="lam2val">1.0</span>
+  </div>
+</div>
+
+<p class="classification" id="classLabel"></p>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const W = canvas.width;
+const H = canvas.height;
+const RANGE = 5;
+
+// Starting points
+const starts = [];
+for (let i = 0; i < 8; i++) {
+  const t = i * Math.PI / 4;
+  starts.push([Math.cos(t), Math.sin(t)]);
+}
+const offAxis = [45, 135, 225, 315].map(d => d * Math.PI / 180);
+for (const t of offAxis) {
+  starts.push([2 * Math.cos(t), 2 * Math.sin(t)]);
+  starts.push([3 * Math.cos(t), 3 * Math.sin(t)]);
+}
+
+const step = 0.02;
+const nSteps = 300;
+
+function toCanvas(x, y) {
+  return [
+    (x / RANGE + 1) * W / 2,
+    (1 - y / RANGE) * H / 2
+  ];
+}
+
+function classify(l1, l2) {
+  if (l1 === 0 && l2 === 0) return 'All equilibria';
+  if (l1 === 0 || l2 === 0) return 'Non-isolated equilibria';
+  if (l1 < 0 && l2 < 0) return 'Stable node (sink)';
+  if (l1 > 0 && l2 > 0) return 'Unstable node (source)';
+  return 'Saddle';
+}
+
+function draw(lam1, lam2) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Axes
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+  ctx.lineWidth = 1;
+  const [ox1, oy1] = toCanvas(-RANGE, 0);
+  const [ox2, oy2] = toCanvas(RANGE, 0);
+  ctx.beginPath();
+  ctx.moveTo(ox1, oy1);
+  ctx.lineTo(ox2, oy2);
+  ctx.stroke();
+  const [oy3, oy4] = toCanvas(0, -RANGE);
+  const [oy5, oy6] = toCanvas(0, RANGE);
+  ctx.beginPath();
+  ctx.moveTo(oy3, oy4);
+  ctx.lineTo(oy5, oy6);
+  ctx.stroke();
+
+  // Streamlines
+  ctx.strokeStyle = '#2255aa';
+  ctx.lineWidth = 1.2;
+
+  for (const [sx, sy] of starts) {
+    // Forward
+    let pts = [[sx, sy]];
+    for (let i = 0; i < nSteps; i++) {
+      const [px, py] = pts[pts.length - 1];
+      const dx = lam1 * px;
+      const dy = lam2 * py;
+      pts.push([px + dx * step, py + dy * step]);
+    }
+    ctx.beginPath();
+    let [cx, cy] = toCanvas(pts[0][0], pts[0][1]);
+    ctx.moveTo(cx, cy);
+    for (let i = 1; i < pts.length; i++) {
+      [cx, cy] = toCanvas(pts[i][0], pts[i][1]);
+      ctx.lineTo(cx, cy);
+    }
+    ctx.stroke();
+
+    // Backward
+    pts = [[sx, sy]];
+    for (let i = 0; i < nSteps; i++) {
+      const [px, py] = pts[pts.length - 1];
+      const dx = lam1 * px;
+      const dy = lam2 * py;
+      pts.push([px - dx * step, py - dy * step]);
+    }
+    ctx.beginPath();
+    [cx, cy] = toCanvas(pts[0][0], pts[0][1]);
+    ctx.moveTo(cx, cy);
+    for (let i = 1; i < pts.length; i++) {
+      [cx, cy] = toCanvas(pts[i][0], pts[i][1]);
+      ctx.lineTo(cx, cy);
+    }
+    ctx.stroke();
+
+    // Arrow at starting point
+    const adx = lam1 * sx;
+    const ady = lam2 * sy;
+    const spd = Math.sqrt(adx * adx + ady * ady);
+    if (spd > 0) {
+      const arrowLen = 0.2;
+      const nx = adx / spd * arrowLen;
+      const ny = ady / spd * arrowLen;
+      const [ax1, ay1] = toCanvas(sx, sy);
+      const [ax2, ay2] = toCanvas(sx + nx, sy + ny);
+
+      // Arrow line
+      ctx.strokeStyle = '#cc3333';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(ax1, ay1);
+      ctx.lineTo(ax2, ay2);
+      ctx.stroke();
+
+      // Arrowhead
+      const angle = Math.atan2(ay2 - ay1, ax2 - ax1);
+      const headLen = 7;
+      ctx.fillStyle = '#cc3333';
+      ctx.beginPath();
+      ctx.moveTo(ax2, ay2);
+      ctx.lineTo(ax2 - headLen * Math.cos(angle - 0.4), ay2 - headLen * Math.sin(angle - 0.4));
+      ctx.lineTo(ax2 - headLen * Math.cos(angle + 0.4), ay2 - headLen * Math.sin(angle + 0.4));
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = '#2255aa';
+      ctx.lineWidth = 1.2;
+    }
+  }
+
+  document.getElementById('classLabel').textContent = classify(lam1, lam2);
+}
+
+// Slider handling
+const lam1Slider = document.getElementById('lam1');
+const lam2Slider = document.getElementById('lam2');
+const lam1Val = document.getElementById('lam1val');
+const lam2Val = document.getElementById('lam2val');
+
+function update() {
+  const l1 = parseFloat(lam1Slider.value);
+  const l2 = parseFloat(lam2Slider.value);
+  lam1Val.textContent = l1.toFixed(1);
+  lam2Val.textContent = l2.toFixed(1);
+  draw(l1, l2);
+}
+
+lam1Slider.addEventListener('input', update);
+lam2Slider.addEventListener('input', update);
+
+update();
+</script>
+</body>
+</html>
